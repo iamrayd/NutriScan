@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:nutriscan/screens/chatbot_screen.dart';
 import 'package:nutriscan/utils/utils.dart';
 import '../models/product_model.dart';
 
@@ -65,7 +66,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   void _showAllergenAlert(List<String> matchedAllergens) {
     final isSafe = matchedAllergens.isEmpty;
     final title = isSafe ? 'No Allergen Detected' : 'Allergen Detected';
-    final message = isSafe ? '' : matchedAllergens.join(', ');
+    final message = isSafe ? 'Safe for user consumption' : matchedAllergens.join(', ');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showDialog(
@@ -214,6 +215,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         : "None";
   }
 
+  void _navigateToChatbot() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatbotScreen(chatHistory: []),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -226,6 +236,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             Navigator.pop(context);
           },
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.chat, color: Colors.black),
+            onPressed: _navigateToChatbot,
+          ),
+        ],
       ),
       backgroundColor: Colors.white,
       body: SafeArea(

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/firestore_constants.dart';
 import '../models/user_model.dart';
 import '../models/product_model.dart';
@@ -16,8 +17,6 @@ class FirestoreService {
       throw Exception('Failed to save user profile: $e');
     }
   }
-
-
 
   Future<List<ProductModel>> getSavedProducts(String uid) async {
     try {
@@ -45,7 +44,6 @@ class FirestoreService {
       throw Exception('Failed to update allergens: $e');
     }
   }
-
 
   Future<UserModel?> getUserProfile(String uid) async {
     try {
@@ -124,5 +122,38 @@ class FirestoreService {
     } catch (e) {
       throw Exception('Failed to get recent scans: $e');
     }
+  }
+
+  Future<Map<String, dynamic>> getUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('User not logged in');
+
+    final userDoc = await _db.collection('users').doc(user.uid).get();
+    final recentScansQuery = await _db
+        .collection('users')
+        .doc(user.uid)
+        .collection('recent_scans')
+        .limit(5)
+        .get();
+    final savedProductsQuery = await _db
+        .collection('users')
+        .doc(user.uid)
+        .collection('saved_products')
+        .limit(5)
+        .get();
+
+    List<String> allergens = List<String>.from(userDoc.data()?['allergens'] ?? []);
+    List<Map<String, dynamic>> recentScans = recentScansQuery.docs
+        .map((doc) => doc.data() as Map<String, dynamic>)
+        .toList();
+    List<Map<String, dynamic>> savedProducts = savedProductsQuery.docs
+        .map((doc) => doc.data() as Map<String, dynamic>)
+        .toList();
+
+    return {
+      'allergens': allergens,
+      'recentScans': recentScans,
+      'savedProducts': savedProducts,
+    };
   }
 }

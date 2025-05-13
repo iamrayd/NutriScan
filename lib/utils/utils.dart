@@ -34,6 +34,7 @@ export '../screens/auth_screens/complete_profile_screen.dart';
 
 // main screens handler
 export '../screens/screen_handler.dart';
+export '../screens/chatbot_screen.dart';
 
 export '../screens/main/home_screen.dart';
 export '../screens/main/profile_screen.dart';
