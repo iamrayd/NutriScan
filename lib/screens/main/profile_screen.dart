@@ -24,7 +24,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserProfile() async {
-    UserModel? fetchedUser = await _firestoreService.getUserProfile(_authService.getCurrentUser()!.uid);
+    UserModel? fetchedUser =
+    await _firestoreService.getUserProfile(_authService.getCurrentUser()!.uid);
     setState(() {
       user = fetchedUser;
     });
@@ -56,7 +57,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    user!.bio.isNotEmpty ? user!.bio : "A Health Enthusiast",
+                    user!.bio.isNotEmpty ? user!.bio : "",
                     style: const TextStyle(color: Colors.grey),
                   ),
                 ],
@@ -66,7 +67,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Divider(height: 32, thickness: 1.2),
           Align(
             alignment: Alignment.centerLeft,
-            child: Text("Personal Information", style: Theme.of(context).textTheme.titleMedium),
+            child: Text(
+              "Personal Information",
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -103,10 +107,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         showDialog(
                           context: context,
                           builder: (_) => AllergenWidget(
-                            initialAllergens: user!.allergens, // Pass current allergens
+                            initialAllergens: user!.allergens,
                             onAllergensSelected: (selectedAllergens) async {
-                              await _firestoreService.updateUserAllergens(_authService.getCurrentUser()!.uid, selectedAllergens);
-                              _loadUserProfile(); // Refresh the profile
+                              await _firestoreService.updateUserAllergens(
+                                _authService.getCurrentUser()!.uid,
+                                selectedAllergens,
+                              );
+                              _loadUserProfile();
                             },
                           ),
                         );
@@ -154,14 +161,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildPill(String allergen) {
     return Container(
-      width: 100,
       height: 28,
-      alignment: Alignment.center,
+      padding: const EdgeInsets.only(left: 12, right: 4),
       decoration: BoxDecoration(
         color: Colors.grey[300],
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(allergen, style: const TextStyle(fontSize: 12)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              allergen,
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.close, size: 16),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Remove Allergen'),
+                  content: Text('Remove $allergen from your profile?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        try {
+                          final updatedAllergens = List<String>.from(user!.allergens)..remove(allergen);
+                          await _firestoreService.updateUserAllergens(
+                            _authService.getCurrentUser()!.uid,
+                            updatedAllergens,
+                          );
+                          await _loadUserProfile();
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to remove allergen: $e')),
+                          );
+                        }
+                      },
+                      child: const Text('Remove'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

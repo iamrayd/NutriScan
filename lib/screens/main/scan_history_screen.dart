@@ -27,7 +27,7 @@ class _HistoryScreenState extends State<HistoryScreen> with SingleTickerProvider
   }
 
   Future<void> _loadProducts() async {
-    List<ProductModel> products = await _firestoreService.getProducts(_authService.getCurrentUser()!.uid);
+    List<ProductModel> products = await _firestoreService.getRecentScans(_authService.getCurrentUser()!.uid);
     setState(() {
       _allProducts = products;
       _filteredProducts = List.from(_allProducts);

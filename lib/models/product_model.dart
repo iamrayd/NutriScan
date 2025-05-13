@@ -9,7 +9,7 @@ class ProductModel {
   final String nutrients;
   final String nutritionalInfo;
   final String imageURL;
-  final List<String> allergens; // Added allergens field
+  final List<String> allergens;
 
   ProductModel({
     required this.barcode,
@@ -37,7 +37,7 @@ class ProductModel {
       'nutrients': nutrients,
       'nutritionalInfo': nutritionalInfo,
       'imageURL': imageURL,
-      'allergens': allergens, // Include allergens in toMap
+      'allergens': allergens,
     };
   }
 
@@ -53,7 +53,7 @@ class ProductModel {
       nutrients: map['nutrients'] ?? 'N/A',
       nutritionalInfo: map['nutritionalInfo'] ?? 'N/A',
       imageURL: map['imageURL'] ?? '',
-      allergens: List<String>.from(map['allergens'] ?? []), // Include allergens in fromMap
+      allergens: List<String>.from(map['allergens'] ?? []),
     );
   }
 }

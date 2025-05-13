@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:nutriscan/utils/utils.dart';
 import '../../services/auth_service.dart';
@@ -15,33 +16,34 @@ class SavedProductsScreen extends StatefulWidget {
 class _SavedProductsScreenState extends State<SavedProductsScreen> {
   final TextEditingController _searchController = TextEditingController();
   final AuthService _authService = AuthService();
-  final FirestoreService _firestoreService = FirestoreService();
-  List<ProductModel> _allProducts = [];
-  List<ProductModel> _filteredProducts = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadProducts();
-    _searchController.addListener(_filterProducts);
+  void _filterProducts(List<ProductModel> products, String query) {
+    final filtered = products.where((product) {
+      return (product.barcode?.toLowerCase().contains(query) ?? false) ||
+          (product.productName?.toLowerCase().contains(query) ?? false);
+    }).toList();
+    setState(() {}); // Trigger rebuild with filtered data in StreamBuilder
   }
 
-  Future<void> _loadProducts() async {
-    List<ProductModel> products = await _firestoreService.getProducts(_authService.getCurrentUser()!.uid);
-    setState(() {
-      _allProducts = products;
-      _filteredProducts = List.from(_allProducts);
-    });
-  }
+  Future<void> _toggleFavorite(ProductModel product) async {
+    final user = _authService.getCurrentUser();
+    if (user == null) return;
 
-  void _filterProducts() {
-    String query = _searchController.text.toLowerCase();
-    setState(() {
-      _filteredProducts = _allProducts.where((product) {
-        return product.barcode.toLowerCase().contains(query) ||
-            product.productName.toLowerCase().contains(query);
-      }).toList();
-    });
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('saved_products')
+          .doc(product.barcode)
+          .delete();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Removed from saved products')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to remove product: $e')),
+      );
+    }
   }
 
   @override
@@ -52,6 +54,9 @@ class _SavedProductsScreenState extends State<SavedProductsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = _authService.getCurrentUser();
+    final query = _searchController.text.toLowerCase();
+
     return Column(
       children: [
         Padding(
@@ -68,48 +73,174 @@ class _SavedProductsScreenState extends State<SavedProductsScreen> {
                   border: InputBorder.none,
                   icon: Icon(Icons.search),
                 ),
+                onChanged: (value) => setState(() {}), // Trigger rebuild on search input
               ),
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: const [
+              Expanded(flex: 2, child: Text("Barcode #", style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+              Expanded(flex: 2, child: Text("Date", style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+              Expanded(flex: 2, child: Text("Product", style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+              Expanded(flex: 1, child: Text("Price", style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+              Expanded(flex: 2, child: Text("Status", style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: _filteredProducts.length,
-            itemBuilder: (context, index) {
-              final product = _filteredProducts[index];
-              return Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                elevation: 3,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(12),
-                  title: Text(product.barcode),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Product: ${product.productName}"),
-                      Text("Calories: ${product.calories}"),
-                      Text("Price: ${product.price}"),
-                      Text(
-                        product.isSafe ? "Safe" : "Not Safe",
-                        style: TextStyle(color: product.isSafe ? Colors.green : Colors.red),
+          child: user == null
+              ? const Center(child: Text('Please log in to view saved products'))
+              : StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .collection('saved_products')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Center(child: Text('Error loading saved products'));
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final products = snapshot.data!.docs.map((doc) {
+                return ProductModel.fromMap(doc.data() as Map<String, dynamic>);
+              }).toList();
+
+              final filteredProducts = products.where((product) {
+                return (product.barcode?.toLowerCase().contains(query) ?? false) ||
+                    (product.productName?.toLowerCase().contains(query) ?? false);
+              }).toList();
+
+              if (filteredProducts.isEmpty && products.isEmpty) {
+                return const Center(child: Text('No saved products'));
+              }
+
+              return ListView.builder(
+                itemCount: filteredProducts.length,
+                itemBuilder: (context, index) {
+                  final product = filteredProducts[index];
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ProductDetailsScreen(product: product),
+                        ),
+                      );
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
                       ),
-                    ],
-                  ),
-                  trailing: const Icon(
-                    Icons.star,
-                    color: Colors.yellow,
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProductDetailsScreen(product: product),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                product.barcode ?? 'Unknown Barcode',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                product.date ?? 'N/A',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                "${product.productName ?? 'Unknown'} ",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            Expanded(
+                              flex: 1,
+                              child: Text(
+                                product.price ?? 'N/A',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    child: Text(
+                                      product.isSafe ?? false ? "Safe" : "Not Safe",
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: product.isSafe ?? false ? Colors.green : Colors.red,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.star,
+                                      size: 24,
+                                      color: Colors.yellow,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: const Text('Remove Saved Product'),
+                                          content: Text(
+                                              'Remove ${product.productName ?? 'this product'} from saved products?'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(context),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () async {
+                                                Navigator.pop(context);
+                                                await _toggleFavorite(product);
+                                              },
+                                              child: const Text('Remove'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),

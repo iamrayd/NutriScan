@@ -20,29 +20,43 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: FutureBuilder<UserModel?>(
-          future: _firestoreService.getUserProfile(_authService.getCurrentUser()!.uid).timeout(
+          future: _authService.getCurrentUser() != null
+              ? _firestoreService.getUserProfile(_authService.getCurrentUser()!.uid).timeout(
             const Duration(seconds: 10),
             onTimeout: () => null,
-          ),
+          )
+              : Future.value(null),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError || !snapshot.hasData) {
-              return const Center(child: Text('Error loading user profile'));
+              return const Center(child: Text('Error loading user profile or no user logged in'));
             }
             UserModel user = snapshot.data!;
             return Column(
               children: [
                 const SizedBox(height: 16),
-                Image.asset("assets/home_screen_asset.png", height: ScreenUtils.imageHeightHalf(context)),
+                Image.asset(
+                  "assets/home_screen_asset.png",
+                  height: ScreenUtils.imageHeightHalf(context),
+                  errorBuilder: (context, error, stackTrace) {
+                    return const SizedBox.shrink();
+                  },
+                ),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => BarcodeScannerScreen(user: user)),
-                    );
+                    if (_authService.getCurrentUser() != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => BarcodeScannerScreen(user: user)),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please log in to scan products')),
+                      );
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
@@ -65,10 +79,15 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 Expanded(
                   child: FutureBuilder<List<ProductModel>>(
-                    future: _firestoreService.getProducts(_authService.getCurrentUser()!.uid),
+                    future: _authService.getCurrentUser() != null
+                        ? _firestoreService.getRecentScans(_authService.getCurrentUser()!.uid)
+                        : Future.value([]),
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError || !snapshot.hasData) {
+                        return const Center(child: Text('Error loading recent scans'));
                       }
                       final products = snapshot.data!;
                       return ListView.builder(
@@ -152,7 +171,7 @@ class BarcodeScannerScreen extends StatelessWidget {
               imageURL: product.imageURL,
               allergens: product.allergens,
             );
-            await _firestoreService.saveProduct(_authService.getCurrentUser()!.uid, product);
+            await _firestoreService.saveRecentScan(_authService.getCurrentUser()!.uid, product);
 
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Scanned: $value - ${product.isSafe ? "Safe" : "Not Safe"}')),
@@ -168,6 +187,7 @@ class BarcodeScannerScreen extends StatelessWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Error scanning product: $e')),
             );
+            _isScanned = false;
             Navigator.pop(context);
           }
         },

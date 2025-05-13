@@ -35,7 +35,7 @@ class ApiService {
             barcode: barcode,
             productName: product['product_name'] ?? 'Unknown Product',
             date: DateTime.now().toString().split(' ')[0],
-            price: '\$3.99', // Mock price for testing
+            price: product['product_price'] ?? 'N/A',
             isSafe: true,
             ingredients: List<String>.from(product['ingredients_text']?.split(', ') ?? []),
             calories: nutriments['energy-kcal'] != null ? '${nutriments['energy-kcal']} kcal' : 'N/A',

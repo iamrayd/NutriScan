@@ -15,7 +15,7 @@ class _ScreenHandlerState extends State<ScreenHandler> {
 
   final List<Widget> _pages = [
     const HomeScreen(),
-    const Center(child: Text("Meals Page")),
+    const Center(child: Text("Coming Soon!")),
     const HistoryScreen(),
     const SavedProductsScreen(),
     const ProfileScreen(),

@@ -17,6 +17,24 @@ class FirestoreService {
     }
   }
 
+
+
+  Future<List<ProductModel>> getSavedProducts(String uid) async {
+    try {
+      QuerySnapshot query = await _db
+          .collection(FirestoreConstants.usersCollection)
+          .doc(uid)
+          .collection(FirestoreConstants.savedProductsCollection)
+          .get();
+      return query.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return ProductModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      throw Exception('Failed to fetch saved products: $e');
+    }
+  }
+
   Future<void> updateUserAllergens(String uid, List<String> allergens) async {
     try {
       await _db
@@ -27,6 +45,7 @@ class FirestoreService {
       throw Exception('Failed to update allergens: $e');
     }
   }
+
 
   Future<UserModel?> getUserProfile(String uid) async {
     try {
@@ -50,7 +69,10 @@ class FirestoreService {
           .doc(userId)
           .collection(FirestoreConstants.productsCollection)
           .doc(product.barcode)
-          .set(product.toMap());
+          .set({
+        ...product.toMap(),
+        'timestamp': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       throw Exception('Failed to save product: $e');
     }
@@ -62,12 +84,45 @@ class FirestoreService {
           .collection(FirestoreConstants.usersCollection)
           .doc(userId)
           .collection(FirestoreConstants.productsCollection)
+          .orderBy('timestamp', descending: true)
           .get();
       return query.docs
           .map((doc) => ProductModel.fromMap(doc.data() as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      throw Exception('Failed to get products: $e');
+      throw Exception('Failed to get saved products: $e');
+    }
+  }
+
+  Future<void> saveRecentScan(String userId, ProductModel product) async {
+    try {
+      await _db
+          .collection(FirestoreConstants.usersCollection)
+          .doc(userId)
+          .collection(FirestoreConstants.recentScansCollection)
+          .doc(product.barcode)
+          .set({
+        ...product.toMap(),
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Failed to save recent scan: $e');
+    }
+  }
+
+  Future<List<ProductModel>> getRecentScans(String userId) async {
+    try {
+      QuerySnapshot query = await _db
+          .collection(FirestoreConstants.usersCollection)
+          .doc(userId)
+          .collection(FirestoreConstants.recentScansCollection)
+          .orderBy('timestamp', descending: true)
+          .get();
+      return query.docs
+          .map((doc) => ProductModel.fromMap(doc.data() as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get recent scans: $e');
     }
   }
 }
