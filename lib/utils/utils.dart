@@ -40,3 +40,7 @@ export '../screens/main/home_screen.dart';
 export '../screens/main/profile_screen.dart';
 export '../screens/main/saved_products_screen.dart';
 export '../screens/main/scan_history_screen.dart';
+
+// services
+export 'package:nutriscan/services/api_service.dart';
+export 'package:nutriscan/services/chatbot_service.dart';

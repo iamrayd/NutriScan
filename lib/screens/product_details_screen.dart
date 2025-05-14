@@ -2,17 +2,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:nutriscan/screens/chatbot_screen.dart';
+import 'package:nutriscan/services/api_service.dart';
+import 'package:nutriscan/services/chatbot_service.dart';
 import 'package:nutriscan/utils/utils.dart';
 import '../models/product_model.dart';
+import 'dart:math';
+import 'dart:convert';
 
 class ProductDetailsScreen extends StatefulWidget {
   final ProductModel product;
-  final List<ProductModel>? healthyAlternatives;
 
   const ProductDetailsScreen({
     super.key,
     required this.product,
-    this.healthyAlternatives,
   });
 
   @override
@@ -21,12 +23,16 @@ class ProductDetailsScreen extends StatefulWidget {
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   bool isFavorite = false;
+  List<ProductModel> healthyAlternatives = [];
+  List<String> userAllergens = [];
+  bool isLoadingAlternatives = true;
 
   @override
   void initState() {
     super.initState();
     _checkIfFavorite();
     _checkUserAllergenMatch();
+    _fetchHealthyAlternatives();
   }
 
   Future<void> _checkUserAllergenMatch() async {
@@ -40,15 +46,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           .get();
 
       if (doc.exists) {
-        List<dynamic> userAllergens = doc.data()?['allergens'] ?? [];
+        userAllergens = List<String>.from(doc.data()?['allergens'] ?? []);
         debugPrint("User allergens: $userAllergens");
         debugPrint("Product allergens: ${widget.product.allergens}");
 
-        List<String> userAllergensList = userAllergens.cast<String>();
         List<String> productAllergensList = widget.product.allergens?.cast<String>() ?? [];
-
         List<String> matchedAllergens = productAllergensList
-            .where((productAllergen) => userAllergensList.contains(productAllergen))
+            .where((productAllergen) => userAllergens.contains(productAllergen))
             .toList();
 
         _showAllergenAlert(matchedAllergens);
@@ -60,6 +64,75 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to fetch allergen profile: $e')),
       );
+    }
+  }
+
+  Future<void> _fetchHealthyAlternatives() async {
+    setState(() => isLoadingAlternatives = true);
+    try {
+      // Step 1: Use ChatbotService to get similar product barcodes
+      final chatbotService = ChatbotService();
+      final prompt =
+          "Suggest 3-6 products that are similar to '${widget.product.productName}' in the same category. \n"
+          "Search for products in the category of '${widget.product.productName}' (primary category from categories_tags) in the Open Food Facts API. \n"
+          "Return only the barcodes as a comma-separated list (e.g., '123456,789101,112131,415161') or include barcodes in your response (e.g., 'Similar products: 123456, 789101'). ""\n"
+          "Make sure the similar barcodes exist in the Open Food Facts API.";
+      final response = await chatbotService.getChatbotResponse(prompt);
+      debugPrint("Chatbot response: $response");
+
+      // Parse barcodes using ChatbotService
+      List<String> barcodes = chatbotService.parseBarcodes(response);
+      if (barcodes.isEmpty) {
+        debugPrint("No valid barcodes found in chatbot response");
+        setState(() => isLoadingAlternatives = false);
+        return;
+      }
+      if (barcodes.length > 4) {
+        barcodes = barcodes.sublist(0, 4); // Limit to 4
+      }
+
+      // Step 2: Fetch product details using ApiService
+      final apiService = ApiService();
+      List<ProductModel> fetchedAlternatives = [];
+      for (String barcode in barcodes) {
+        try {
+          final product = await apiService.fetchProductDetails(barcode);
+          if (product != null) {
+            fetchedAlternatives.add(product);
+          }
+        } catch (e) {
+          debugPrint("Failed to fetch product for barcode $barcode: $e");
+        }
+      }
+
+      // Step 3: Filter out products with matching allergens
+      List<ProductModel> safeAlternatives = [];
+      for (var product in fetchedAlternatives) {
+        List<String> productAllergens = product.allergens?.cast<String>() ?? [];
+        bool hasAllergens = productAllergens.any((allergen) => userAllergens.contains(allergen));
+        if (!hasAllergens) {
+          safeAlternatives.add(product);
+        }
+      }
+
+      // Step 4: Randomly select 1-4 safe alternatives
+      if (safeAlternatives.isNotEmpty) {
+        final random = Random();
+        final count = random.nextInt(min(safeAlternatives.length, 4)) + 1; // 1-4
+        safeAlternatives.shuffle(random);
+        setState(() {
+          healthyAlternatives = safeAlternatives.sublist(0, count);
+          isLoadingAlternatives = false;
+        });
+      } else {
+        setState(() => isLoadingAlternatives = false);
+      }
+    } catch (e) {
+      debugPrint("Error fetching healthy alternatives: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to fetch healthy alternatives: $e')),
+      );
+      setState(() => isLoadingAlternatives = false);
     }
   }
 
@@ -348,17 +421,31 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         const SizedBox(height: 12),
         SizedBox(
           height: 140,
-          child: (widget.healthyAlternatives != null &&
-              widget.healthyAlternatives!.isNotEmpty)
+          child: isLoadingAlternatives
+              ? const Center(child: CircularProgressIndicator())
+              : healthyAlternatives.isNotEmpty
               ? ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: widget.healthyAlternatives!.length,
+            itemCount: healthyAlternatives.length,
             itemBuilder: (context, index) {
-              final alt = widget.healthyAlternatives![index];
-              return _altCard(alt.productName, alt.calories, alt.imageURL);
+              final alt = healthyAlternatives[index];
+              return GestureDetector(
+                onTap: () {
+                  // Navigate to ProductDetailsScreen with the selected alternative
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProductDetailsScreen(
+                        product: alt,
+                      ),
+                    ),
+                  );
+                },
+                child: _altCard(alt.productName, alt.calories, alt.imageURL),
+              );
             },
           )
-              : const Center(child: Text("Nothing to show")),
+              : const Center(child: Text("No healthy alternatives found")),
         ),
       ],
     );
